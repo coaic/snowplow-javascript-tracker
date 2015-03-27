@@ -59,6 +59,7 @@
 		var	queueName,
 			executingQueue = false,
 			configCollectorUrl,
+			maxBytes = 40000, // TODO: make this configurable
 			outQueue;
 
 		// Fall back to GET for browsers which don't support CORS XMLHttpRequests (e.g. IE <= 9)
@@ -74,6 +75,7 @@
 		if (useLocalStorage) {
 			// Catch any JSON parse errors that might be thrown
 			try {
+				// TODO: backward compatibility with the old version of the queue for POST requests
 				outQueue = json2.parse(localStorage.getItem(queueName));
 			}
 			catch(e) {}
@@ -128,9 +130,13 @@
 		 * Convert numeric fields to strings to match payload_data schema
 		 */
 		function getBody(request) {
-			return lodash.mapValues(request, function (v) {
+			var cleanedRequest = lodash.mapValues(request, function (v) {
 				return v.toString();
 			});
+			return {
+				cleanedRequest: cleanedRequest,
+				memorySize: json2.stringify(cleanedRequest).length
+			};
 		}
 
 		/*
@@ -139,6 +145,17 @@
 		 */
 		function enqueueRequest (request, url) {
 
+			if (usePost) {
+				var body = getBody(request);
+				if (body.memorySize >= maxBytes) {
+					helpers.warn("Event of size " + body.memorySize + " is too long - the maximum size is " + maxBytes);
+					return;
+				} else {
+					outQueue.push(body);
+				}
+			} else {
+				outQueue.push(getQuerystring(request));
+			}
 			outQueue.push(usePost ? getBody(request) : getQuerystring(request));
 			configCollectorUrl = url + path;
 			var savedToLocalStorage = false;
@@ -188,12 +205,26 @@
 					executingQueue = false;
 				}, 5000);
 
+				function chooseHowManyToExecute(q) {
+					var numberToSend = 0;
+					var byteCount = 0;
+					while (numberToSend < q.length) {
+						byteCount += q[numberToSend].memorySize;
+						if (byteCount >= maxBytes) {
+							break;
+						} else {
+							numberToSend += 1;
+						}
+					}
+					return numberToSend;
+				}
+
 				// Keep track of number of events to delete from queue
-				var eventCount = outQueue.length;
+				var numberToSend = chooseHowManyToExecute(outQueue);
 
 				xhr.onreadystatechange = function () {
 					if (xhr.readyState === 4 && xhr.status >= 200 && xhr.status < 400) {
-						for (var deleteCount = 0; deleteCount < eventCount; deleteCount++) {
+						for (var deleteCount = 0; deleteCount < numberToSend; deleteCount++) {
 							outQueue.shift();
 						}
 						if (useLocalStorage) {
@@ -208,11 +239,14 @@
 				};
 
 				xhr.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
+				var batch = lodash.map(outQueue.slice(0, numberToSend), function (x) {
+					return x.cleanedRequest;
+				});
 				var batchRequest = {
 					schema: 'iglu:com.snowplowanalytics.snowplow/payload_data/jsonschema/1-0-2',
-					data: outQueue
+					data: batch
 				};
-				if (outQueue.length > 0) {
+				if (batch.length > 0) {
 					xhr.send(json2.stringify(batchRequest));
 				}
 
