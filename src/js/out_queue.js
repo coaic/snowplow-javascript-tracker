@@ -135,8 +135,36 @@
 			});
 			return {
 				cleanedRequest: cleanedRequest,
-				memorySize: json2.stringify(cleanedRequest).length
+				memorySize: getUTF8Length(json2.stringify(cleanedRequest))
 			};
+		}
+
+		/**
+		 * Count the number of bytes a string will occupy when UTF-8 encoded
+		 * Taken from http://stackoverflow.com/questions/2848462/count-bytes-in-textarea-using-javascript/
+		 *
+		 * @param string s
+		 * @return number Length of s in bytes when UTF-8 encoded
+		 */
+		function getUTF8Length(s) {
+			var len = 0;
+			for (var i = 0; i < s.length; i++) {
+				var code = s.charCodeAt(i);
+				if (code <= 0x7f) {
+					len += 1;
+				} else if (code <= 0x7ff) {
+					len += 2;
+				} else if (code >= 0xd800 && code <= 0xdfff) {
+					// Surrogate pair: These take 4 bytes in UTF-8 and 2 chars in UCS-2
+					// (Assume next char is the other [valid] half and just skip it)
+					len += 4; i++;
+				} else if (code < 0xffff) {
+					len += 3;
+				} else {
+					len += 4;
+				}
+			}
+			return len;
 		}
 
 		/*
