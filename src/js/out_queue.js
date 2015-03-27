@@ -70,7 +70,7 @@
 		bufferSize = (localStorageAccessible() && useLocalStorage && usePost && bufferSize) || 1;
 
 		// Different queue names for GET and POST since they are stored differently
-		queueName = ['snowplowOutQueue', functionName, namespace, usePost ? 'post' : 'get'].join('_');
+		queueName = ['snowplowOutQueue', functionName, namespace, usePost ? 'post2' : 'get'].join('_');
 
 		if (useLocalStorage) {
 			// Catch any JSON parse errors that might be thrown
@@ -134,8 +134,8 @@
 				return v.toString();
 			});
 			return {
-				cleanedRequest: cleanedRequest,
-				memorySize: getUTF8Length(json2.stringify(cleanedRequest))
+				evt: cleanedRequest,
+				bytes: getUTF8Length(json2.stringify(cleanedRequest))
 			};
 		}
 
@@ -175,8 +175,8 @@
 
 			if (usePost) {
 				var body = getBody(request);
-				if (body.memorySize >= maxBytes) {
-					helpers.warn("Event of size " + body.memorySize + " is too long - the maximum size is " + maxBytes);
+				if (body.bytes >= maxBytes) {
+					helpers.warn("Event of size " + body.bytes + " is too long - the maximum size is " + maxBytes);
 					return;
 				} else {
 					outQueue.push(body);
@@ -184,7 +184,6 @@
 			} else {
 				outQueue.push(getQuerystring(request));
 			}
-			outQueue.push(usePost ? getBody(request) : getQuerystring(request));
 			configCollectorUrl = url + path;
 			var savedToLocalStorage = false;
 			if (useLocalStorage) {
@@ -237,7 +236,7 @@
 					var numberToSend = 0;
 					var byteCount = 0;
 					while (numberToSend < q.length) {
-						byteCount += q[numberToSend].memorySize;
+						byteCount += q[numberToSend].bytes;
 						if (byteCount >= maxBytes) {
 							break;
 						} else {
@@ -268,7 +267,7 @@
 
 				xhr.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
 				var batch = lodash.map(outQueue.slice(0, numberToSend), function (x) {
-					return x.cleanedRequest;
+					return x.evt;
 				});
 				var batchRequest = {
 					schema: 'iglu:com.snowplowanalytics.snowplow/payload_data/jsonschema/1-0-2',
