@@ -53,13 +53,13 @@
 	 * @param boolean usePost Whether to send events by POST or GET
 	 * @param int bufferSize How many events to batch in localStorage before sending them all.
 	 *                       Only applies when sending POST requests and when localStorage is available.
+	 * @param int maxPostBytes Maximum combined size in bytes of the event JSONs in a POST request
 	 * @return object OutQueueManager instance
 	 */
-	object.OutQueueManager = function (functionName, namespace, mutSnowplowState, useLocalStorage, usePost, bufferSize) {
+	object.OutQueueManager = function (functionName, namespace, mutSnowplowState, useLocalStorage, usePost, bufferSize, maxPostBytes) {
 		var	queueName,
 			executingQueue = false,
 			configCollectorUrl,
-			maxBytes = 40000, // TODO: make this configurable
 			outQueue;
 
 		// Fall back to GET for browsers which don't support CORS XMLHttpRequests (e.g. IE <= 9)
@@ -73,7 +73,7 @@
 		queueName = ['snowplowOutQueue', functionName, namespace, usePost ? 'post2' : 'get'].join('_');
 
 		if (useLocalStorage) {
-			// Catch any JSON parse errors that might be thrown
+			// Catch any JSON parse errors or localStorage that might be thrown
 			try {
 				// TODO: backward compatibility with the old version of the queue for POST requests
 				outQueue = json2.parse(localStorage.getItem(queueName));
@@ -175,8 +175,8 @@
 
 			if (usePost) {
 				var body = getBody(request);
-				if (body.bytes >= maxBytes) {
-					helpers.warn("Event of size " + body.bytes + " is too long - the maximum size is " + maxBytes);
+				if (body.bytes >= maxPostBytes) {
+					helpers.warn("Event of size " + body.bytes + " is too long - the maximum size is " + maxPostBytes);
 					return;
 				} else {
 					outQueue.push(body);
@@ -237,7 +237,7 @@
 					var byteCount = 0;
 					while (numberToSend < q.length) {
 						byteCount += q[numberToSend].bytes;
-						if (byteCount >= maxBytes) {
+						if (byteCount >= maxPostBytes) {
 							break;
 						} else {
 							numberToSend += 1;
